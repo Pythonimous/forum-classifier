@@ -10,6 +10,8 @@ from rnnmorph.predictor import RNNMorphPredictor
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 s = requests.Session()
 
+if not os.path.isdir('data'):
+    os.mkdir('data')
 # Extract relevant page urls from each thread by topic
 
 pairs = []
@@ -25,14 +27,14 @@ def get_urls_list(url, category_name):
     pairs += urls_list
 
 
-with open('threads.txt', 'r') as t:
+with open('data/threads.txt', 'r') as t:
     threads = [a.split() for a in t.read().split('\n') if a]
 t.close()
 
 for thread in threads:
     get_urls_list(thread[0], thread[1])
 
-with open('links.pkl', 'wb') as links:
+with open('data/links.pkl', 'wb') as links:
     pickle.dump(pairs, links)
 
 # Extract texts from URLs, preprocess and save them
@@ -75,8 +77,8 @@ def download_threads(pages, start=0):
                 pass
 
 
-if os.path.isfile('base.csv'):
-    base = pd.read_csv('base.csv')
+if os.path.isfile('data/base.csv'):
+    base = pd.read_csv('data/base.csv')
     checkpoint = len(base)
 else:
     base = pd.DataFrame()
@@ -93,4 +95,4 @@ def quote_msg(x):
 
 base['text'] = base['text'].apply(quote_msg)
 
-base.to_csv('base.csv', index=False)
+base.to_csv('data/base.csv', index=False)
