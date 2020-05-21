@@ -3,6 +3,7 @@ import string, re, nltk
 import pandas as pd
 from tqdm import tqdm
 from bs4 import BeautifulSoup
+from utils import split_texts_to_len
 
 # nltk.download('stopwords'), nltk.download('punkt')
 from rnnmorph.predictor import RNNMorphPredictor
@@ -56,13 +57,10 @@ def preprocess_sentence(sen):
     return text
 
 
-lines_list = []
-
-
-def download_threads(pages, start=0):
-    global lines_list
-
-    for post_category, url in tqdm(pages[start:]):
+def download_threads(base, pages):
+    count = 0
+    lines_list = []
+    for post_category, url in tqdm(pages):
         resp = s.get(url, verify=False)
         soup = BeautifulSoup(resp.text, 'html.parser')
         posts = soup.find('div', {'id': 'posts'}).findAll('div', class_='page')
@@ -70,29 +68,53 @@ def download_threads(pages, start=0):
         for post in posts:
             try:
                 post_username = post.find('a', class_='bigusername').text
-                post_text = preprocess_sentence(' '.join(post.find('td', class_='alt1').text.strip().split()))
-                post_class = 'Anime'
-                lines_list.append({'username': post_username, 'text': post_text, 'class': post_class})
+                line = post.find('td', class_='alt1').text.strip()
+                post_text = preprocess_sentence(' '.join(line.split()))
+                post_class = post_category
+                lines_list.append({'username': post_username,
+                                   'text': post_text,
+                                   'class': post_class,
+                                   'page_url': url})
             except:
                 pass
+        count += 1
+        if count == 50:
+            base = add_to_base(base, lines_list)
+            count = 0
+            lines_list = []
+
+            base.to_csv('data/complete_base.csv', index=False)
+
+    base = add_to_base(base, lines_list)
+    return base
 
 
-if os.path.isfile('data/base.csv'):
-    base = pd.read_csv('data/base.csv')
-    checkpoint = len(base)
+def add_to_base(base, list_to_add):
+    def quote_msg(x):
+        x = x.replace('цитата сообщение ', '')
+        return x
+    base = base.append(list_to_add).reset_index(drop=True).dropna()
+    base['text'] = base['text'].apply(quote_msg)
+    return base
+
+
+if os.path.isfile('data/complete_base.csv'):
+    base = pd.read_csv('data/complete_base.csv')
+    pairs = [p for p in pairs if p[1] not in set(base['page_url'])]
 else:
     base = pd.DataFrame()
-    checkpoint = 0
 
-download_threads(pairs, checkpoint)
-base = base.append(lines_list).reset_index(drop=True).dropna()
+base = download_threads(base, pairs)
+base = base.dropna()
+base.to_csv('data/complete_base.csv', index=False)
 
+row_lengths = []
+for _, row in base.iterrows():
+    row_lengths.append(len(row['text'].split()))
+average_words = int(sum(row_lengths) / len(row_lengths))
 
-def quote_msg(x):
-    x = x.replace('цитата сообщение ', '')
-    return x
+resampled_base = split_texts_to_len(base, average_words, 42)
+resampled_base.to_csv('data/resampled_base.csv', index=False)
 
-
-base['text'] = base['text'].apply(quote_msg)
-
-base.to_csv('data/base.csv', index=False)
+truncated_base = resampled_base[resampled_base['text'].str.len() > 150]
+truncated_base.to_csv('data/base.csv', index=False)

@@ -2,6 +2,7 @@ import math
 import pickle
 import itertools
 import pandas as pd
+from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
 
@@ -103,3 +104,36 @@ def all_vectors(sentences, all_map):
                 vector.append(all_map[word])
         vectors.append(vector)
     return vectors
+
+
+def get_users(database, class_map):
+    users = set(database['username'])
+    user_texts = {user: [] for user in users}
+    for _, row in database.iterrows():
+        user_texts[row['username']].append((row['text'], class_map[row['class']]))
+    return user_texts
+
+
+def make_vectors(label_lists):
+    labels = []
+    for l in label_lists:
+        label_list = [0] * 10
+        for idx in l:
+            label_list[idx] = 1
+        labels.append(label_list)
+    return labels
+
+
+def split_texts_to_len(frame, target_length, seed):
+    new_frame_rows = []
+    for _, row in tqdm(frame.iterrows(), total=len(frame)):
+        username = row['username']
+        text_class = row['class']
+        text = row['text'].split()
+        while len(text) > target_length:
+            to_add, text = ' '.join(text[:target_length]), text[target_length:]
+            new_frame_rows.append({'username': username, 'class': text_class, 'text': to_add})
+        new_frame_rows.append({'username': username, 'class': text_class, 'text': ' '.join(text)})
+    new_base = pd.DataFrame(new_frame_rows)
+    new_base = new_base.sample(frac=1, random_state=seed).reset_index(drop=True)
+    return new_base
